@@ -39,7 +39,7 @@ def extract_html_and_links(
     selector: str = "a[href]",
 ) -> tuple[str, list[str]]:
     if not check_link_validity(url):
-        return url, []
+        raise ValueError(f"Invalid URL: {url}.")
     response = requests.get(url, timeout=30)
     response.raise_for_status()
 

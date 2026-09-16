@@ -24,6 +24,9 @@ class CrawlPriorityQueue:
         self.domain_visited = CountMinSketch()
         self.sequence = count()
 
+    def visit_domain(self, domain: str) -> None:
+        self.domain_visited.add(domain)
+
     def _priority(self, domain: str) -> float:
         # Lower priority for domains that have been visited more frequently
         p = self.domain_visited.estimate(domain)

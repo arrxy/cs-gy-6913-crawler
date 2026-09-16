@@ -1,5 +1,6 @@
 import hashlib
 import math
+from threading import Lock
 
 class CountMinSketch:
     def __init__(
@@ -16,6 +17,7 @@ class CountMinSketch:
             for _ in range(self.num_hashes)
         ]
         self.total_count = 0
+        self.lock = Lock()
 
     def _positions(self, item: str):
         data = item.encode("utf-8")
@@ -27,15 +29,17 @@ class CountMinSketch:
 
     def add(self, item: str, count: int = 1) -> None:
         count = max(count, 0)
-        for row, column in self._positions(item):
-            self.table[row][column] += count
-        self.total_count += count
+        with self.lock:
+            for row, column in self._positions(item):
+                self.table[row][column] += count
+            self.total_count += count
 
     def estimate(self, item: str) -> int:
-        return min(
-            self.table[row][column]
-            for row, column in self._positions(item)
-        )
+        with self.lock:
+            return min(
+                self.table[row][column]
+                for row, column in self._positions(item)
+            )
 
     def __contains__(self, item: str) -> bool:
         return self.estimate(item) > 0
