@@ -9,6 +9,10 @@ class CountMinSketch:
             error_probability: float = 0.001
         ):
         # Rows correspond to the number of hash functions, and columns correspond to the width of the sketch.
+        if error_rate <= 0 or error_rate >= 1:
+            raise ValueError("error_rate must be in the range (0, 1).")
+        if error_probability <= 0 or error_probability >= 1:
+            raise ValueError("error_probability must be in the range (0, 1).")
         self.width = math.ceil(math.e / error_rate)
         self.num_hashes = math.ceil(math.log(1 / error_probability))
 
