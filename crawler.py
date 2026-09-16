@@ -7,9 +7,9 @@ def init_crawler(text: str) -> None:
     print(f"Searching for: {text}")
     search_links = search_engine_query(text)
     print("Results found:", len(search_links))
-    crawler(search_links)
+    _crawler(search_links)
 
-def crawler(search_links: list[str]) -> list[dict[str, str | list[str]]]:
+def _crawler(search_links: list[str]) -> list[dict[str, str | list[str]]]:
     pages = []
     for url in search_links:
         try:

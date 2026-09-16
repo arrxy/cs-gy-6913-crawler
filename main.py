@@ -1,5 +1,5 @@
-from crawler import crawler
+from crawler import init_crawler
 
 if __name__ == '__main__':
     text = input("Enter your initial search query: ")
-    crawler(text)
+    init_crawler(text)
