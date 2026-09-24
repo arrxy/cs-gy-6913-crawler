@@ -1,0 +1,100 @@
+HOW THE PROGRAM WORKS
+
+The crawler takes a search query from the user, when we run uv run main.py, sends it to the Tavily search API,
+and uses the returned result URLs as seed pages, with a maximum of 20 urls. From there it crawls outward,
+following links page by page, until it reaches a page limit, a time limit, or runs out of URLs to visit.
+
+We have one main thread (coordinator) and multiple worker threads.
+The coordinator keeps track of which URLs have been seen, which are waiting to be crawled, and in what order.
+Workers fetch pages and return the results to the coordinator.
+The coordinator then records the visit and queues any new links it found.
+
+One key feature is that we are not using any datastructures that grows infinitely thus causing a MLE.
+Instead we are using a Count-Min Sketch and a Bloom filter to keep track of the domains we have visited and
+the URLs we have seen, respectively. Also for robots.txt, we are using a fixed-size LRU cache that has a max
+size limit. One limitation is the Queue is unbounded.
+
+Choosing what to crawl next: URLs wait in a priority queue that favors domains we have visited
+less. Each domain's visit count is kept in a Count-Min Sketch, a fixed-size table of counters
+that estimates how often each domain has been seen without storing every domain. A URL's priority
+is 1 / log2(visits + 2), so a new domain scores 1.0 and scores fall as a domain gets crawled more.
+This spreads the crawl across many sites instead of draining one site at a time. Since domain
+counts keep changing after a URL is queued, priorities are refreshed lazily: when the top of the
+queue is taken, its priority is recomputed, and if it has dropped the URL is pushed back and the
+next one is checked. Ties are broken in the order URLs were discovered.
+
+Avoiding duplicates: before a URL is queued, its #fragment is removed and it is checked against a
+Bloom filter, a compact bit array that can say "definitely not seen" or "probably seen". URLs that
+are probably seen are skipped. This uses far less memory than storing every URL, at the cost of
+occasionally skipping a URL that was never actually crawled.
+
+Fetching a page: before fetching, the worker checks the site's robots.txt (Robot Exclusion
+Protocol) and skips the URL if it is disallowed. robots.txt files are cached per site in a
+fixed-size LRU cache. If robots.txt is missing (404) the whole site is allowed; if it is
+forbidden (401/403), fails with a server error, or times out, the site is treated as fully
+disallowed. The page is then downloaded as a stream with a 5 MB cap and a 5 second read timeout.
+Responses with error codes, including 403 and 404, are discarded, as are non-HTML responses.
+Pages are saved to disk under downloads/<run id>/, named by hostname plus a SHA-256 hash of the URL.
+
+Extracting links: the HTML is parsed with BeautifulSoup, every <a href> is resolved into an
+absolute URL (honoring the page's <base href> tag if present, and the final URL after redirects
+otherwise), and only http/https links are kept. Any URL containing the string "cgi" is dropped,
+to avoid dynamic scripts that can generate endless pages.
+
+Stopping: the coordinator stops handing out new work when the page limit or time limit is reached,
+or on Ctrl+C, but lets fetches already in progress finish. It then shuts the workers down and
+writes a summary to the log: why the crawl stopped, pages collected, pages per second, URLs still
+pending, and how many URLs were skipped and why. Every visit is logged with its URL, domain,
+priority, depth, status code, size, time taken, and outcome.
+
+
+KNOWN BUGS AND LIMITATIONS
+
+- The Priority Queue is unbounded, so very long crawls can use a lot of memory. Ideally we should stop pushing new
+  URLs when the queue reaches a certain size, and wait for the queue to drain before adding more.
+  This is a known limitation of the current design.
+  Fixing this would require a more complex design with a separate thread to manage the queue.
+
+- The Bloom filter and Count-Min Sketch are sized up front. Past their expected capacity they
+  saturate: the Bloom filter starts skipping more and more new URLs as false positives, and the
+  Count-Min Sketch overestimates domain counts more, which distorts priorities.
+
+- The priority formula 1 / log2(visits + 2) drops steeply over a domain's first few visits and
+  then flattens out.
+
+- Domain counts are only updated when a fetch finishes, not when a URL is handed to a worker.
+  With N threads, up to N URLs from the same domain can be dispatched at the same unchanged
+  priority before any of their visits are counted. Failed fetches are never counted at all, so a
+  domain that keeps failing keeps its high priority.
+
+- A page's depth (distance from the seed pages) is fixed when it is first discovered. If a
+  shorter path to it is found later, the depth is not updated, because the Bloom filter rejects
+  the URL as already seen.
+
+- If a site's robots.txt fails to load (timeout or server error), the site stays blocked for the
+  rest of the run while it remains in the cache.
+
+- There is no explicit per-domain delay between requests. Politeness relies on the
+  domain-diversity priority spreading requests across hosts.
+
+- The "cgi" filter matches the string anywhere in the URL, so it can drop harmless URLs that
+  happen to contain those letters.
+
+- The priority queue frontier is unbounded, so very long crawls can use a lot of memory.
+
+- Ctrl+C is not instant: in-flight fetches finish first, which can take a few seconds.
+
+
+ADDITIONAL RESOURCES USED
+
+- Tavily Search API, for the initial seed URLs.
+- Python libraries: requests, BeautifulSoup (bs4), tldextract, protego, python-dotenv.
+- Standard formulas for sizing the Bloom filter and Count-Min Sketch
+
+SPECIAL FEATURES BEYOND THE BASIC REQUIREMENTS
+
+- Bloom filter for memory-efficient duplicate detection.
+- Streaming downloads with a size cap and content-type check.
+- LRU-cached robots.txt handling.
+- Structured per-visit logging and an end-of-crawl summary.
+- Clean shutdown on page limit, time limit, errors, or Ctrl+C.
