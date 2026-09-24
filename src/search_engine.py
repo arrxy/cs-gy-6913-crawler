@@ -1,10 +1,11 @@
 import os
 from urllib.parse import urlparse
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 def search_engine_query(text: str, max_results: int = 20) -> list[str]:
     max_results = min(max_results, 20)
 

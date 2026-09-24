@@ -1,0 +1,25 @@
+HOW TO RUN
+
+1. Install uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+
+2. Install dependencies
+    From the project root:
+    uv sync
+
+    This creates .venv and installs everything from pyproject.toml / uv.lock.
+
+3. Set up the API key
+    Create a file named .env in the project root with:
+
+    TAVILY_API_KEY=your_tavily_api_key_here
+
+    Get a key at https://tavily.com. Tavily is used to fetch the seed URLs for the crawl.
+
+4. Run the crawler
+    uv run main.py
+
+5. Output
+    Downloaded pages are saved to downloads/<random uuid>/, one folder per run.
+    Each file is named <hostname>_<sha256 of url>.html.
+    A crawl summary (stop reason, pages collected, pages/sec, skipped URLs) is logged at the end.
